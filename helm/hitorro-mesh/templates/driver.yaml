@@ -19,10 +19,25 @@ spec:
         {{- include "hitorro-mesh.labels" . | nindent 8 }}
         role: driver
     spec:
+      # Phase 7e — pod-level security: run as the non-root user baked into
+      # the Dockerfile (uid 1000). fsGroup ensures mounted ConfigMap volumes
+      # are group-readable by that user.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: driver
           image: "{{ .Values.driver.image.repository }}:{{ .Values.driver.image.tag }}"
           imagePullPolicy: {{ .Values.driver.image.pullPolicy }}
+          # Container-level security: drop every capability the app doesn't
+          # need. Root FS stays writable because Spring writes to /tmp;
+          # tighten via emptyDir mount if you need readOnlyRootFilesystem.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           args:
             - "--spring.config.location=file:/config/driver.yml"
           ports:

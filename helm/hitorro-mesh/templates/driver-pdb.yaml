@@ -1,0 +1,20 @@
+{{- if .Values.driver.pdb.enabled }}
+# Phase 7e — protect the driver from voluntary disruption (node drain,
+# rolling update). Since the chart deploys a SINGLE driver replica by
+# default, minAvailable: 1 prevents any voluntary eviction while it's
+# the only driver. Scale up + set to a percentage for true HA.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+spec:
+  minAvailable: {{ .Values.driver.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: hitorro-mesh
+      role: driver
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

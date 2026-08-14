@@ -13,8 +13,21 @@ fullnameOverride: ""
 # The NATS URL every process will connect to. Point this at your existing
 # NATS server. If you want the chart to spin up NATS too, add the community
 # `nats` chart as a dependency in a wrapper chart or values file.
+#
+# Phase 7e — TLS + auth via `natsSecurity`. Populate to enable secure NATS
+# transport per hitorro-mesh-nats/NatsSecurityProperties. Applied identically
+# to both driver and every agent so the cluster comes up coherent.
+#   tls: true                          # or use tls:// URL scheme
+#   trustStorePath: /secrets/ca.p12    # PKCS12 truststore
+#   trustStorePassword: changeit
+#   keyStorePath: /secrets/client.p12  # mTLS client cert
+#   keyStorePassword: changeit
+#   credentialsFile: /secrets/mesh.creds   # nkey + JWT (preferred over token/user/pass)
+# For any of these to work, mount the actual secret files via
+# `driver.extraVolumes` / `agent.extraVolumes`.
 nats:
   url: "nats://nats:4222"
+  security: {}   # empty = no TLS, no auth (dev default)
 
 # --- driver ---------------------------------------------------------------
 driver:
@@ -35,6 +48,11 @@ driver:
   resources:
     requests: { cpu: "500m", memory: "1Gi" }
     limits:   { cpu: "2",    memory: "4Gi" }
+  # Phase 7e — PodDisruptionBudget. Set enabled:true for production; the
+  # default keeps the chart lightweight for dev.
+  pdb:
+    enabled: false
+    minAvailable: 1
   # Bootstrap tables — same shape as hitorro.mesh.driver.tables in Spring config.
   tables:
     - name: docs

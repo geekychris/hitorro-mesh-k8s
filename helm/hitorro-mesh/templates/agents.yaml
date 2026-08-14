@@ -27,6 +27,11 @@ data:
           id: {{ $agent.id | quote }}
           transport: nats
           nats-url: {{ $.Values.nats.url | quote }}
+          {{- with $.Values.nats.security }}
+          # Phase 7e — TLS + auth (mirrors driver config).
+          nats-security:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           heartbeat-interval: {{ $.Values.agent.heartbeatInterval }}
           # capabilities-from-annotation flow: HITORRO_MESH_CAPABILITIES env
           # (set via the Downward API in the Deployment below) merges with
@@ -73,10 +78,20 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # Phase 7e — non-root user (matches Dockerfile.agent).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: agent
           image: "{{ $.Values.agent.image.repository }}:{{ $.Values.agent.image.tag }}"
           imagePullPolicy: {{ $.Values.agent.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           args:
             - "--spring.config.location=file:/config/agent.yml"
           env:

@@ -18,6 +18,12 @@ data:
         driver:
           transport: nats
           nats-url: {{ .Values.nats.url | quote }}
+          {{- with .Values.nats.security }}
+          # Phase 7e — TLS + auth for NATS. See values.yaml for the
+          # supported keys.
+          nats-security:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           agent-expiry: 15s
           tables:
             {{- range .Values.driver.tables }}
