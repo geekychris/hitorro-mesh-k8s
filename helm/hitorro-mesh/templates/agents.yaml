@@ -1,0 +1,133 @@
+# One ConfigMap + one Deployment per agent (loop over .Values.agents).
+# Each agent Pod gets:
+#   - a label set that KubernetesClusterManager matches (app + role)
+#   - the annotation `hitorro.mesh/capabilities` — the agent JAR reads it
+#     from an env var populated by the Downward API
+#   - a ConfigMap-mounted agent.yml (Spring config) + its NDJSON data
+{{- range $agent := .Values.agents }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hitorro-mesh.fullname" $ }}-{{ $agent.id }}
+  labels:
+    {{- include "hitorro-mesh.labels" $ | nindent 4 }}
+    role: agent
+    hitorro.mesh/agent-id: {{ $agent.id | quote }}
+data:
+  agent.yml: |
+    server:
+      port: 8091
+    spring:
+      main:
+        banner-mode: off
+    hitorro:
+      mesh:
+        agent:
+          id: {{ $agent.id | quote }}
+          transport: nats
+          nats-url: {{ $.Values.nats.url | quote }}
+          heartbeat-interval: {{ $.Values.agent.heartbeatInterval }}
+          # capabilities-from-annotation flow: HITORRO_MESH_CAPABILITIES env
+          # (set via the Downward API in the Deployment below) merges with
+          # this list. The env is preferred; keep both in sync.
+          capabilities:
+            {{- range $agent.capabilities }}
+            - {{ . | quote }}
+            {{- end }}
+          tables:
+            - name: docs
+              partition-key: {{ $agent.partitionKey | quote }}
+              type-json-resource: file:/config/types/docs.json
+              ndjson-file: file:/data/{{ $agent.partitionKey }}.ndjson
+  {{ $agent.partitionKey }}.ndjson: |
+{{ $agent.ndjson | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hitorro-mesh.fullname" $ }}-{{ $agent.id }}
+  labels:
+    {{- include "hitorro-mesh.labels" $ | nindent 4 }}
+    role: agent
+    hitorro.mesh/agent-id: {{ $agent.id | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hitorro-mesh
+      role: agent
+      hitorro.mesh/agent-id: {{ $agent.id | quote }}
+  template:
+    metadata:
+      labels:
+        {{- include "hitorro-mesh.labels" $ | nindent 8 }}
+        role: agent
+        hitorro.mesh/agent-id: {{ $agent.id | quote }}
+      annotations:
+        # KubernetesClusterManager reads capabilities from this annotation.
+        # The agent JAR reads them via the env var below (Downward API).
+        hitorro.mesh/capabilities: {{ join "," $agent.capabilities | quote }}
+    spec:
+      {{- with $agent.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ $.Values.agent.image.repository }}:{{ $.Values.agent.image.tag }}"
+          imagePullPolicy: {{ $.Values.agent.image.pullPolicy }}
+          args:
+            - "--spring.config.location=file:/config/agent.yml"
+          env:
+            # Downward API — pushes the pod annotation into an env var the
+            # agent JAR reads as its capability list (see AgentProperties).
+            - name: HITORRO_MESH_CAPABILITIES
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['hitorro.mesh/capabilities']
+          ports:
+            - containerPort: 8091
+              name: rest
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: rest }
+            initialDelaySeconds: 5
+            periodSeconds: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: rest }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml $.Values.agent.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: types
+              mountPath: /config/types
+              readOnly: true
+            - name: data
+              mountPath: /data
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "hitorro-mesh.fullname" $ }}-{{ $agent.id }}
+            items:
+              - key: agent.yml
+                path: agent.yml
+        - name: types
+          configMap:
+            name: {{ include "hitorro-mesh.fullname" $ }}-driver-config
+            items:
+              {{- range $name, $_ := $.Values.driver.types }}
+              - key: {{ $name }}
+                path: {{ $name }}
+              {{- end }}
+        - name: data
+          configMap:
+            name: {{ include "hitorro-mesh.fullname" $ }}-{{ $agent.id }}
+            items:
+              - key: {{ $agent.partitionKey }}.ndjson
+                path: {{ $agent.partitionKey }}.ndjson
+{{- end }}

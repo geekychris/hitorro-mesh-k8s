@@ -1,0 +1,102 @@
+# Driver Deployment + Service (+ optional Ingress).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hitorro-mesh
+      role: driver
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "hitorro-mesh.labels" . | nindent 8 }}
+        role: driver
+    spec:
+      containers:
+        - name: driver
+          image: "{{ .Values.driver.image.repository }}:{{ .Values.driver.image.tag }}"
+          imagePullPolicy: {{ .Values.driver.image.pullPolicy }}
+          args:
+            - "--spring.config.location=file:/config/driver.yml"
+          ports:
+            - containerPort: {{ .Values.driver.service.port }}
+              name: rest
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: rest }
+            initialDelaySeconds: 5
+            periodSeconds: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: rest }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.driver.resources | nindent 12 }}
+          volumeMounts:
+            - name: driver-config
+              mountPath: /config
+            - name: driver-types
+              mountPath: /config/types
+      volumes:
+        - name: driver-config
+          configMap:
+            name: {{ include "hitorro-mesh.fullname" . }}-driver-config
+            # Only mount driver.yml at /config; types are separately mounted below.
+            items:
+              - key: driver.yml
+                path: driver.yml
+        - name: driver-types
+          configMap:
+            name: {{ include "hitorro-mesh.fullname" . }}-driver-config
+            items:
+              {{- range $name, $_ := .Values.driver.types }}
+              - key: {{ $name }}
+                path: {{ $name }}
+              {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+spec:
+  type: {{ .Values.driver.service.type }}
+  selector:
+    app: hitorro-mesh
+    role: driver
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: rest
+      port: {{ .Values.driver.service.port }}
+      targetPort: rest
+{{- if .Values.driver.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+spec:
+  ingressClassName: {{ .Values.driver.ingress.className }}
+  rules:
+    - host: {{ .Values.driver.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hitorro-mesh.fullname" . }}-driver
+                port:
+                  number: {{ .Values.driver.service.port }}
+{{- end }}

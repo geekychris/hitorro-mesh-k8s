@@ -1,0 +1,39 @@
+# Optional ServiceAccount + RBAC binding so the driver Pod can call
+# the K8s API (Pods list) via KubernetesClusterManager.
+#
+# If your driver never enables the K8s cluster-manager bean, you can skip
+# this block. It's only needed for the declared-vs-live UI enrichment.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver-podreader
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver-podreader
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "hitorro-mesh.fullname" . }}-driver-podreader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hitorro-mesh.fullname" . }}-driver

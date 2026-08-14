@@ -1,0 +1,38 @@
+# Driver Spring Boot config + JVS type files, mounted at /config/ inside the pod.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-driver-config
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: driver
+data:
+  driver.yml: |
+    server:
+      port: {{ .Values.driver.service.port }}
+    spring:
+      main:
+        banner-mode: off
+    hitorro:
+      mesh:
+        driver:
+          transport: nats
+          nats-url: {{ .Values.nats.url | quote }}
+          agent-expiry: 15s
+          tables:
+            {{- range .Values.driver.tables }}
+            - name: {{ .name | quote }}
+              type-json-resource: {{ .typeJsonResource | quote }}
+              partitions:
+                {{- range .partitions }}
+                - key: {{ .key | quote }}
+                  required-capabilities:
+                    {{- range .requiredCapabilities }}
+                    - {{ . | quote }}
+                    {{- end }}
+                {{- end }}
+            {{- end }}
+  {{- range $name, $body := .Values.driver.types }}
+  {{ $name }}: |-
+{{ $body | indent 4 }}
+  {{- end }}

@@ -1,0 +1,101 @@
+# --------------------------------------------------------------------------
+# hitorro-mesh chart values
+#
+# Override these on install:
+#   helm install mesh ./hitorro-mesh -f my-values.yaml
+#
+# The chart deploys ONE driver and N agents (one per entry in `agents`).
+# --------------------------------------------------------------------------
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The NATS URL every process will connect to. Point this at your existing
+# NATS server. If you want the chart to spin up NATS too, add the community
+# `nats` chart as a dependency in a wrapper chart or values file.
+nats:
+  url: "nats://nats:4222"
+
+# --- driver ---------------------------------------------------------------
+driver:
+  image:
+    # Build locally and load into your cluster's registry:
+    #   docker build -f hitorro-mesh-examples/docker/Dockerfile.driver \
+    #                -t hitorro/mesh-driver:3.0.1 .
+    repository: hitorro/mesh-driver
+    tag: "3.0.1"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8085
+  ingress:
+    enabled: false
+    className: nginx
+    host: mesh.example.com
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "2",    memory: "4Gi" }
+  # Bootstrap tables — same shape as hitorro.mesh.driver.tables in Spring config.
+  tables:
+    - name: docs
+      typeJsonResource: "file:/config/types/docs.json"
+      partitions:
+        - key: us
+          requiredCapabilities: [jvssql, "partition:docs:us"]
+        - key: eu
+          requiredCapabilities: [jvssql, "partition:docs:eu"]
+        - key: apac
+          requiredCapabilities: [jvssql, "partition:docs:apac"]
+  # JVS type files mounted from a ConfigMap. Provide as name:content pairs.
+  types:
+    docs.json: |
+      {
+        "name": "docs",
+        "fields": [
+          {"name": "id",      "type": "core_string"},
+          {"name": "title",   "type": "core_string"},
+          {"name": "lang",    "type": "core_string"},
+          {"name": "size_kb", "type": "core_long"}
+        ]
+      }
+
+# --- agents ---------------------------------------------------------------
+agent:
+  image:
+    repository: hitorro/mesh-agent
+    tag: "3.0.1"
+    pullPolicy: IfNotPresent
+  heartbeatInterval: 2s
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "2",    memory: "2Gi" }
+
+# One entry per shard. Each becomes its own Deployment/Pod with an
+# advertised capability set and a mounted NDJSON dataset. `nodeSelector`
+# lets you pin an agent to specific nodes (data locality).
+agents:
+  - id: agent-us
+    partitionKey: us
+    capabilities: [jvssql, "partition:docs:us"]
+    # Mounted at /data/data/<partitionKey>.ndjson via the ConfigMap below.
+    ndjson: |
+      {"id":"us-1","title":"Quarterly Report","lang":"en","size_kb":210}
+      {"id":"us-2","title":"Roadmap Q4","lang":"en","size_kb":84}
+      {"id":"us-3","title":"Hiring Plan","lang":"en","size_kb":640}
+    nodeSelector: {}
+  - id: agent-eu
+    partitionKey: eu
+    capabilities: [jvssql, "partition:docs:eu"]
+    ndjson: |
+      {"id":"eu-1","title":"Rapport Annuel","lang":"fr","size_kb":512}
+      {"id":"eu-2","title":"Marktbericht","lang":"de","size_kb":128}
+      {"id":"eu-3","title":"Product Overview","lang":"en","size_kb":45}
+    nodeSelector: {}
+  - id: agent-apac
+    partitionKey: apac
+    capabilities: [jvssql, "partition:docs:apac"]
+    ndjson: |
+      {"id":"ap-1","title":"四半期報告","lang":"ja","size_kb":190}
+      {"id":"ap-2","title":"월간 리뷰","lang":"ko","size_kb":55}
+      {"id":"ap-3","title":"APAC Rollout","lang":"en","size_kb":320}
+    nodeSelector: {}

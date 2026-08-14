@@ -1,0 +1,20 @@
+apiVersion: v2
+name: hitorro-mesh
+description: |
+  Hitorro Mesh — Spark-like distributed compute layer over the Hitorro
+  stack. This chart deploys the driver (Deployment + Service + optional
+  Ingress) and one agent Deployment per declared shard, all talking to a
+  NATS server that you provide (either the community nats subchart or your
+  own).
+type: application
+version: 0.1.0
+appVersion: "3.0.1"
+home: https://github.com/geekychris/hitorro
+sources:
+  - https://github.com/geekychris/hitorro
+keywords:
+  - hitorro
+  - mesh
+  - nats
+  - sql
+  - jvs
