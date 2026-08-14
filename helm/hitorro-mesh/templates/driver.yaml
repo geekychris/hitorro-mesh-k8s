@@ -43,12 +43,17 @@ spec:
           ports:
             - containerPort: {{ .Values.driver.service.port }}
               name: rest
+          # Phase 7j — liveness stays cheap (JVM up + Spring healthy);
+          # readiness includes the MeshHealthIndicator so a driver with
+          # uncovered partitions is temporarily removed from the Service.
+          # Restarting for OUT_OF_SERVICE (a rolling agent deploy) would
+          # thrash — separate paths keep it stable.
           readinessProbe:
             httpGet: { path: /actuator/health, port: rest }
             initialDelaySeconds: 5
             periodSeconds: 3
           livenessProbe:
-            httpGet: { path: /actuator/health, port: rest }
+            httpGet: { path: /actuator/health/liveness, port: rest }
             initialDelaySeconds: 20
             periodSeconds: 10
           resources:
