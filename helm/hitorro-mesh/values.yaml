@@ -117,3 +117,27 @@ agents:
       {"id":"ap-2","title":"월간 리뷰","lang":"ko","size_kb":55}
       {"id":"ap-3","title":"APAC Rollout","lang":"en","size_kb":320}
     nodeSelector: {}
+
+# ─── fleet-retrieval ─────────────────────────────────────────────────
+# Read-only Lucene + KV retrieval service (see hitorro-fleet-retrieval).
+# When enabled, deployed as a StatefulSet with N replicas + a
+# Service labeled app=hitorro-fleet-retrieval so the driver's
+# KubernetesFleetEndpointRegistry auto-discovers each replica and
+# federates queries across all of them (via CompositeSearchProvider
+# with the caller-selected merger — score, RRF, or field:name).
+fleetRetrieval:
+  enabled: false                     # off by default; opt-in
+  replicas: 2
+  mode: shared                       # "shared" uses ReadOnlyIndex/Kv secondaries;
+                                     # "standalone" owns its own writer
+  image:
+    repository: hitorro/fleet-retrieval
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: 2,    memory: 4Gi }
+  storage:
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    # storageClassName: fast-ssd     # uncomment + set per your cluster

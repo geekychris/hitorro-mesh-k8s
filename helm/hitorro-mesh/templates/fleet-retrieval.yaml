@@ -1,0 +1,143 @@
+{{- if .Values.fleetRetrieval.enabled }}
+# fleet-retrieval — read-only Lucene + KV retrieval service, N replicas.
+#
+# Each replica is a StatefulSet pod with its own PVC pointing at its
+# shard of /var/data/pipelines-home (Lucene indexes + KV stores).
+# The headless Service gives every replica a stable DNS name
+# (fleet-retrieval-0.fleet-retrieval, -1, -2, ...) so the driver can
+# federate across them.
+#
+# The regular Service (below) carries the app=hitorro-fleet-retrieval
+# label — that's what KubernetesFleetEndpointRegistry watches for.
+# Only the headless Service participates in per-replica addressing;
+# the regular one is what the driver's FleetEndpointRegistry discovers.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-fleet-retrieval
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    app: hitorro-fleet-retrieval
+    role: fleet-retrieval
+data:
+  fleet.yml: |
+    server:
+      port: 8087
+    spring:
+      main:
+        banner-mode: off
+    hitorro:
+      fleet:
+        retrieval:
+          mode: {{ .Values.fleetRetrieval.mode }}       # shared | standalone
+          pipelines-home: /var/data/pipelines-home
+          driver-url: http://{{ include "hitorro-mesh.fullname" . }}-driver:8085
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-fleet-retrieval
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    app: hitorro-fleet-retrieval   # <-- KubernetesFleetEndpointRegistry watches this
+    role: fleet-retrieval
+spec:
+  type: ClusterIP
+  ports:
+    - name: retrieval
+      port: 8087
+      targetPort: 8087
+  selector:
+    app: hitorro-mesh
+    role: fleet-retrieval
+---
+# Headless service for stable per-pod DNS (fleet-retrieval-0.fleet-retrieval, ...).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-fleet-retrieval-headless
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: fleet-retrieval
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: retrieval
+      port: 8087
+      targetPort: 8087
+  selector:
+    app: hitorro-mesh
+    role: fleet-retrieval
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "hitorro-mesh.fullname" . }}-fleet-retrieval
+  labels:
+    {{- include "hitorro-mesh.labels" . | nindent 4 }}
+    role: fleet-retrieval
+spec:
+  replicas: {{ .Values.fleetRetrieval.replicas }}
+  serviceName: {{ include "hitorro-mesh.fullname" . }}-fleet-retrieval-headless
+  selector:
+    matchLabels:
+      app: hitorro-mesh
+      role: fleet-retrieval
+  template:
+    metadata:
+      labels:
+        {{- include "hitorro-mesh.labels" . | nindent 8 }}
+        role: fleet-retrieval
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: fleet-retrieval
+          image: "{{ .Values.fleetRetrieval.image.repository }}:{{ .Values.fleetRetrieval.image.tag }}"
+          imagePullPolicy: {{ .Values.fleetRetrieval.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          args:
+            - "--spring.config.location=file:/config/fleet.yml"
+          ports:
+            - containerPort: 8087
+              name: retrieval
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: retrieval }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: retrieval }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.fleetRetrieval.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: data
+              mountPath: /var/data/pipelines-home
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "hitorro-mesh.fullname" . }}-fleet-retrieval
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [{{ .Values.fleetRetrieval.storage.accessMode | quote }}]
+        {{- with .Values.fleetRetrieval.storage.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.fleetRetrieval.storage.size | quote }}
+{{- end }}

@@ -75,6 +75,14 @@ public final class KubernetesClusterManager implements ClusterManager, AutoClose
         this.cacheTtlMillis = cacheTtlMillis;
     }
 
+    /** The active fabric8 client — exposed so downstream discovery (fleet-retrieval
+     *  registry, dataset controller, others) can piggyback on this one connection
+     *  instead of opening a second. */
+    public KubernetesClient getKubeClient() { return client; }
+
+    /** Namespace this manager watches. */
+    public String getNamespace() { return namespace; }
+
     /** Convenience factory that opens its own {@link KubernetesClient} from ambient config. */
     public static KubernetesClusterManager fromAmbientConfig(String namespace, URI dashboardBase, long cacheTtlMillis) {
         KubernetesClient c = new KubernetesClientBuilder().build();
