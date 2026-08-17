@@ -141,3 +141,34 @@ fleetRetrieval:
     size: 20Gi
     accessMode: ReadWriteOnce
     # storageClassName: fast-ssd     # uncomment + set per your cluster
+
+# ─── MinIO — optional S3-compatible object storage subchart ─────────
+# When enabled, deployed as a single-replica StatefulSet + Service +
+# credentials Secret. Driver + agent pods reach it at
+# {name}-minio:9000. On post-install a one-shot mc Job creates the
+# default bucket.
+#
+# For multi-node distributed MinIO (erasure-coded), use the official
+# MinIO operator instead — this subchart is for the "just a bucket"
+# dev / single-tenant story.
+minio:
+  enabled: false                    # opt-in
+  rootUser: hitorro
+  rootPassword: hitorro-dev-only    # OVERRIDE in production!
+  bucket: hitorro
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: 2,    memory: 4Gi }
+  storage:
+    size: 100Gi
+    accessMode: ReadWriteOnce
+    # storageClassName: fast-ssd
+  bucketInit:
+    enabled: true                   # one-shot Job to create bucket on install
+    image:
+      repository: minio/mc
+      tag: latest
