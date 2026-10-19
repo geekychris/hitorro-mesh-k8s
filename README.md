@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Hitorro Mesh K8S logo" width="180">
+</p>
+
 # hitorro-mesh-k8s
 
 Kubernetes bridge for the Hitorro Mesh. Parallel to
