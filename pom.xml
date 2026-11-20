@@ -6,7 +6,7 @@
 
     <groupId>com.hitorro</groupId>
     <artifactId>hitorro-mesh-k8s</artifactId>
-    <version>3.0.2</version>
+    <version>4.0.0</version>
     <packaging>jar</packaging>
 
     <name>hitorro-mesh-k8s</name>
@@ -78,6 +78,17 @@
                 <artifactId>jline-terminal-jni</artifactId>
                 <version>3.30.17</version>
             </dependency>
+            <dependency>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>3.1.8</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Jackson 2 is used by the fabric8 Kubernetes client (and calcite-core through hitorro-jvssql). HiTorro code uses
+                 only Jackson 3. Stays on 2.18.12 (as on main), not 2.21.8 like the other mesh modules: fabric8 6.13.4 on
+                 Jackson 2.19+ fails to serialize resources with unknown fields (NPE "keySerializer is null" in
+                 AnyGetterWriter); Jackson2GoldenCompatTest pins the round trip. Revisit when fabric8 moves to 7.x. -->
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
@@ -421,19 +432,19 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-core</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-driver</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
         </dependency>
         <!-- Shares the ClusterManager SPI with the Orion bridge — we don't
              re-declare it. Runtime picks whichever bridge is on the classpath. -->
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-orion</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>io.fabric8</groupId>
